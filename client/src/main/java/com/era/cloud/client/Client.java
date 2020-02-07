@@ -17,10 +17,10 @@ public class Client {
             File file = new File(path2); // объект File
             String fileName = file.getName(); // получили имя файла
             int fileNameLength = fileName.length();
-            int fileSize = (int)file.length(); // размер файла
+            int fileSize = (int) file.length(); // размер файла
 
             CloudPackage pack = new CloudPackage(fileName, fileNameLength, fileSize, 15);
-            ds.write(pack.dataFromTheFile(file));
+            ds.write(pack.dataFromTheFile(file)); // отправка на сервер
 
         } catch (IOException e) {
             e.printStackTrace();

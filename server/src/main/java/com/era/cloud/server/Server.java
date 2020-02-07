@@ -14,7 +14,7 @@ public class Server {
 
             Socket socket = serverSocket.accept();
             System.out.println("Клиент подключился.");
-            // входной байтовый поток от клиента
+            //inpST - входной байтовый поток от клиента
             DataInputStream inpST = new DataInputStream(socket.getInputStream());
 
             CloudPackage pack = new CloudPackage();
@@ -32,7 +32,7 @@ public class Server {
 
             } else if (key == 17){
 
-                String command = pack.readCommand(inpST);
+                String command = pack.readCommand(inpST); // строковое представление команды
                 System.out.println(command);
             }
         } catch (IOException e) {
