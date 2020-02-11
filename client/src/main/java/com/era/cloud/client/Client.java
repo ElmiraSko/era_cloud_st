@@ -2,29 +2,39 @@ package com.era.cloud.client;
 
 import com.era.cloud.common.CloudPackage;
 
+import javax.swing.*;
+import java.awt.*;
 import java.io.*;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class Client {
+
     public static void main(String[] args) {
+        Path  path3 = Paths.get("fileFrom/5.png");
+        try{
+            Socket socket = new Socket("localhost", 8878);
+            DataInputStream in = new DataInputStream(socket.getInputStream());
+            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
 
-        String path1 = "fileFrom/5.png";
-        String path2 = "fileFrom/file1.txt";
+            CloudPackage pack = new CloudPackage();
 
-        try(Socket socket = new Socket("localhost", 8878);
-            DataOutputStream ds = new DataOutputStream(socket.getOutputStream()))
-        {
-            File file = new File(path2); // объект File
-            String fileName = file.getName(); // получили имя файла
-            int fileNameLength = fileName.length();
-            int fileSize = (int) file.length(); // размер файла
+            pack.dataFromTheFile(path3, out); // отправка на сервер
+//            pack.dataFromFile(path3, socket); //
+//            pack.fromFile(path3);       //
 
-            CloudPackage pack = new CloudPackage(fileName, fileNameLength, fileSize, 15);
-            ds.write(pack.dataFromTheFile(file)); // отправка на сервер
-
+        in.close();
+        out.close();
+        socket.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
+
+
+
 
 }
