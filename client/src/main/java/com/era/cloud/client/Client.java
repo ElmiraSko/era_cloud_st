@@ -4,23 +4,23 @@ import com.era.cloud.common.CloudPackage;
 
 import java.io.*;
 import java.net.Socket;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class Client {
     public static void main(String[] args) {
 
-        String path1 = "fileFrom/5.png";
-        String path2 = "fileFrom/file1.txt";
+        Path path1 = Paths.get("fileFrom/5.png");
+        Path path2 = Paths.get("fileFrom/2.txt");
 
-        try(Socket socket = new Socket("localhost", 8878);
-            DataOutputStream ds = new DataOutputStream(socket.getOutputStream()))
+
+        try(Socket socket = new Socket("localhost", 8078);
+            DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+            DataInputStream input = new DataInputStream(socket.getInputStream()))
         {
-            File file = new File(path2); // объект File
-            String fileName = file.getName(); // получили имя файла
-            int fileNameLength = fileName.length();
-            int fileSize = (int) file.length(); // размер файла
-
-            CloudPackage pack = new CloudPackage(fileName, fileNameLength, fileSize, 15);
-            ds.write(pack.dataFromTheFile(file)); // отправка на сервер
+            CloudPackage pack = new CloudPackage(input, output);
+//            pack.sendFile(path1); // передача файла
+            pack.writeCommand("Hello!");
 
         } catch (IOException e) {
             e.printStackTrace();

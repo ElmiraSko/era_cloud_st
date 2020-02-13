@@ -1,78 +1,98 @@
+
 package com.era.cloud.common;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class CloudPackage {
+    private DataInputStream in;
+    private DataOutputStream out;
+    private DataType data;
+    private String command;
 
-    private String fileName;
-    private int fileNameLength;
-    private int fileSize;
-    private int key;
+    private enum DataType {EMPTY, FILE, COMMAND}
 
-    private String text;
-    private int textLength;
-
-//Конструкторы
-    public CloudPackage() {}
-
-    public CloudPackage(String text, int textLength) {
-        this.text = text;
-        this.textLength = textLength;
+    public CloudPackage(DataInputStream in, DataOutputStream out){
+        this.in = in;
+        this.out = out;
     }
 
-    public CloudPackage(String fileName, int nameLength, int fileSize, int key) {
-        this.fileName = fileName;
-        fileNameLength = nameLength;
-        this.fileSize = fileSize;
-        this.key = key;
+    public void setCommand(String command) {
+        this.command = command;
     }
 
-    public void setText(String text) {
-        this.text = text;
-    }
-
-    public void setTextLength(int textLength) {
-        this.textLength = textLength;
-    }
-
-    // Формирует массив байтов для передачи файла
-    //(сигнальный байт, длина имени файла, имя файла, содержимое файла)
-    public byte[] dataFromTheFile(File file) {
-        int allSize = fileNameLength + fileSize + 2;
-        ByteArrayOutputStream bout = new ByteArrayOutputStream(allSize);
-
-        try(FileInputStream inp = new FileInputStream(file)) {
-
-            DataOutputStream dd = new DataOutputStream(bout);
-            dd.write(15);  // сигнальный байт
-            dd.write(fileNameLength); // длина имени файла
-            dd.write(fileName.getBytes()); // байты имени файла
-
-            for (int i = 0; i < fileSize; i++) {
-                dd.write(inp.read());
-            }
-            System.out.println("Указанный файл отправлен на сервер: " + fileName);
+    private DataType getDataType() { // определение типа сообщения
+        try {
+            int firstMessageByte = in.read();
+            if(firstMessageByte == 15){
+                data = DataType.FILE;
+            } else
+            if (firstMessageByte == 17) {
+                data = DataType.COMMAND;
+            } else data = DataType.EMPTY;
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return bout.toByteArray();
+        return data;
     }
 
-    // Формирует массив байтов для команды без указания размера (пока)
-// String str - текст команды
-    public byte[] command(String str) {
+    public void readMessage() { // чтение из входящего потока
+        switch (getDataType()) {
+            case FILE:
+            {
+                try {
+                    writeToFile(in);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                break;
+            }
+            case COMMAND:
+            {
+                try {
+                    readCommand(in);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                break;
+            }
+            case EMPTY:
+                break;
+        }
+    }
+
+    //================ передача файла ==================================
+    public void sendFile(Path path) throws IOException {
+        String fileName = path.getFileName().toString(); // получили имя файла из пути
+        byte fileNameLength = (byte) fileName.length(); // длина имени файла (сколько это байт?)
+        int fileSize = (int) Files.size(path);// размер файла, здесь пробрасывается исключение
+        out.write(15);  // сигнальный байт
+        out.write(fileNameLength); // передали длину имени файла
+        out.write(fileName.getBytes()); // передали байты имени файла
+        try(FileInputStream inp = new FileInputStream(path.toString())) { // открыли входящий поток из файла
+            for (int i = 0; i < fileSize; i++) {
+                out.write(inp.read()); // считываем из файла и отправляем в поток
+            }
+            System.out.println("Передача файла: " + fileName);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ================================= передача команды ===================
+    public void writeCommand(String str) {
         byte[] strByte = str.getBytes();
-        byte[] command = new byte[strByte.length + 1]; // итоговый массив
-        System.out.println(str.length() + " длина строки");
-        System.out.println(strByte.length + " длина массива под строку");
-        command[0] = 17; // сигнальный байт
-        System.arraycopy(strByte, 0, command, 1, strByte.length);
-        return command;
+        try {
+            out.write(17);
+            out.write(strByte);
+        } catch (IOException e) {e.printStackTrace();}
+        System.out.println("Команда: " + str);
     }
-
+    //=========================================================================================
     //Метод buildNameFile - возвращает имя файла полученного из входного потока inpSt
-    // size - длина имени файла
-    public String buildNameFile(int size, InputStream inpSt) throws IOException{
+    private String buildNameFile(int size, InputStream inpSt) throws IOException{
         StringBuilder build = new StringBuilder();
         for (int i = 0; i < size; i++) {
             build.append((char)inpSt.read());
@@ -80,28 +100,33 @@ public class CloudPackage {
         return build.toString();
     }
 
-    // Метод writeFile - записывает в file из InputStream inpSt
-    // без получения размера файла в сообщении
-    public void writeFile(File file, InputStream inpSt){
+    private void writeToFile(InputStream inpSt) throws IOException {
+        int sizeName = inpSt.read();
+        String strName = buildNameFile(sizeName, inpSt); // получили имя файла
+        System.out.println("Получен файл " + strName);
+        String clientDir = "fileTo\\";
+        String clientFile = clientDir + strName;
+        File file = new File(clientFile); // создание объекта File
         try {
             FileOutputStream ft = new FileOutputStream(file);
             int m;
             while ((m = inpSt.read()) != -1){
                 ft.write(m);
-                System.out.print((char) m);
             }
         } catch (IOException e){
             e.printStackTrace();
         }
     }
-    // чтение служебных сообщений
-    public String readCommand(InputStream inpSt) throws IOException{
+
+    // ===================== чтение служебных сообщений
+    private void readCommand(InputStream inpSt) throws IOException{
         BufferedReader buff = new BufferedReader(new InputStreamReader(inpSt));
         StringBuilder br = new StringBuilder();
         String m;
         while ((m = buff.readLine()) != null) {
             br.append(m);
         }
-        return br.toString();
+//        return br.toString();
+        System.out.println("Команда: " + br.toString());
     }
 }

@@ -2,42 +2,42 @@ package com.era.cloud.server;
 
 import com.era.cloud.common.CloudPackage;
 
-import java.io.*;
-import java.net.ServerSocket;
-import java.net.Socket;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.serialization.ClassResolvers;
+import io.netty.handler.codec.serialization.ObjectDecoder;
+import io.netty.handler.codec.serialization.ObjectEncoder;
 
 public class Server {
-    public static void main(String[] args) {
+    public void run() throws Exception {
+        EventLoopGroup mainGroup = new NioEventLoopGroup(); //
+        EventLoopGroup workerGroup = new NioEventLoopGroup(); //
+        try {
+            ServerBootstrap b = new ServerBootstrap(); //
 
-        try(ServerSocket serverSocket = new ServerSocket(8878)){
-            System.out.println("Сервер запущен. Ожидает подключение клиента.");
-
-            Socket socket = serverSocket.accept();
-            System.out.println("Клиент подключился.");
-            //inpST - входной байтовый поток от клиента
-            DataInputStream inpST = new DataInputStream(socket.getInputStream());
-
-            CloudPackage pack = new CloudPackage();
-
-            int key = inpST.read(); // прочитали 1-й байт (сигнальный)
-
-            if (key == 15) {
-
-                int sizeName = inpST.read();
-                String strName = pack.buildNameFile(sizeName, inpST); // получили имя файла
-                System.out.println("Получен файл " + strName);
-
-                File newFile = new File("fileTo\\" + strName); // создание объекта File
-                pack.writeFile(newFile, inpST); // запись файла
-
-            } else if (key == 17){
-
-                String command = pack.readCommand(inpST); // строковое представление команды
-                System.out.println(command);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+            b.group(mainGroup, workerGroup) //
+                    .channel(NioServerSocketChannel.class) //
+                    .childHandler(new ChannelInitializer<SocketChannel>() { //
+                        protected void initChannel(SocketChannel socketChannel) throws Exception {
+                            socketChannel.pipeline().addLast(new HandlerForInput());
+                        }
+                    })
+                    .childOption(ChannelOption.SO_KEEPALIVE, true); //
+            ChannelFuture future = b.bind(8078).sync();
+            future.channel().closeFuture().sync();
+        } finally {
+            mainGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
         }
+    }
 
+    public static void main(String[] args) throws Exception {
+        new Server().run();
     }
 }
