@@ -21,7 +21,7 @@ public class UploadFile implements Serializable {
             FileInputStream inp = new FileInputStream(file);
             for (int i = 0; i < data.length; i++) {
                 data[i] = (byte) inp.read();
-                System.out.print((char) data[i]);
+//                System.out.print((char) data[i]);
             }
 
         } catch (IOException e) {
