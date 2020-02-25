@@ -12,8 +12,23 @@ import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
+
 public class CloudServer {
-    public void run() throws Exception {
+    private ConnectDB connectDB;
+
+
+    private CloudServer() {
+        connectDB = new ConnectDB();
+//        connectDB.all();
+
+    }
+
+
+    private void run() throws Exception {
+
         EventLoopGroup mainGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
@@ -25,7 +40,7 @@ public class CloudServer {
                             socketChannel.pipeline().addLast(
                                     new ObjectDecoder(1024 * 1024 * 100, ClassResolvers.cacheDisabled(null)),
                                     new ObjectEncoder(),
-                                    new MainHandler()
+                                    new MainHandler(connectDB)
                             );
                         }
                     })
@@ -34,9 +49,12 @@ public class CloudServer {
                     .childOption(ChannelOption.TCP_NODELAY, true);
             ChannelFuture future = b.bind(8189).sync();
             future.channel().closeFuture().sync();
+
+
         } finally {
             mainGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
+            connectDB.close();
         }
     }
 

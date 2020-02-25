@@ -13,39 +13,47 @@ import java.io.*;
 import java.net.Socket;
 
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CountDownLatch;
 
 import static com.era.cloud.common.CommandMessage.CMD_MSG_FILES_LIST;
 import static com.era.cloud.common.CommandMessage.CMD_MSG_FILE_DOWNLOAD;
 
 public class ClientSerial extends JFrame {
-    private final int MAX_SIZE = 1024;
+
+    private final int MAX_SIZE = 1024*1024*100;
     private Socket socket;
     private ObjectDecoderInputStream in;
     private ObjectEncoderOutputStream out;
 
     private String rootDir = "client/clientDir/";
     private JTextField textField;
+    private DefaultListModel<String> listOnServerModel_Help = new DefaultListModel<>();
     private DefaultListModel<String> listOnServerModel = new DefaultListModel<>();
     private DefaultListModel<String> clientListModel;
 
-    private ArrayBlockingQueue<Task> requests = new ArrayBlockingQueue<Task>(5);
+    private ArrayBlockingQueue<Task> requests = new ArrayBlockingQueue<>(5);
     private boolean isFile = false;  // true - если файл
+    private JButton buttonEnt, buttonAUth;
+    private volatile String messFromServer = "message";
 
     private ClientSerial() {
         connect();
-        //=====================================
-        new Thread(()->{
+        new Thread(new Operation()).start();
+        GUI();
+
+    }
+
+    class Operation implements Runnable {
+        @Override
+        public void run() {
             while (true){
                 try {
                     Task task = requests.take();
                     task.doing();
                 } catch (InterruptedException ex) {ex.printStackTrace();}
             }
-        }).start();
-        //=======================================
-        GUI();
+        }
     }
+
     public static void main(String[] args) throws Exception {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
@@ -61,15 +69,12 @@ public class ClientSerial extends JFrame {
                 out = new ObjectEncoderOutputStream(socket.getOutputStream());
                 in = new ObjectDecoderInputStream(socket.getInputStream(), 100 * 1024 * 1024);
                 System.out.println("Клиент подключился");
-
-                getFileListFromServer(); // отправка команды на получение списка
-                updateServerList(); // ответ и обновление
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
 
-// Слушатель для кнопки Отправить
+// Слушатель для кнопки "Отправить"
     private class SendButtonListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
@@ -77,9 +82,9 @@ public class ClientSerial extends JFrame {
                 String sendObj = textField.getText();
                 if (!sendObj.equals("")) {
                     if (isFile) {
-                        Task task = new SendFileTask(rootDir + sendObj, in, out, listOnServerModel);
                         try {
-                            requests.put(task); // передача файла на сервер + запрос на список файлов
+                            requests.put(new SendFileTask(rootDir + sendObj, out)); // передача файла на сервер
+                            requests.put(new GetFileListCommandTask(out)); // запрос на список файлов
                         } catch (InterruptedException e1) {
                             e1.printStackTrace();
                         }
@@ -91,6 +96,7 @@ public class ClientSerial extends JFrame {
         }
     }
 
+//============================================================
     private class PullButtonListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
@@ -98,6 +104,7 @@ public class ClientSerial extends JFrame {
             if (!obj.equals("")) {
                 CommandMessage com = new CommandMessage(CMD_MSG_FILE_DOWNLOAD, obj);
                 try { // отправляем запрос на скачивание файла
+//                    requests.put(); //=======????????????????????????????????
                     out.writeObject(com);
                     out.flush();
                 } catch (IOException ex) {ex.printStackTrace();}
@@ -114,6 +121,89 @@ public class ClientSerial extends JFrame {
 
         }
     }
+//===============================================================================================
+    //слушатель для кнопки "Войти" и "Регистрация"
+    private class EnterButtonListener implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            if (e.getActionCommand().equals("Войти")) {
+                new AuthWindow("Авторизация");
+            }
+            if (e.getActionCommand().equals("Регистрация")) {
+                new AuthWindow("Регистрация");
+            }
+        }
+    }
+
+    //вспомогательное окно для авторизации, регистрации нового пользователя
+    class AuthWindow extends JFrame{
+        AuthWindow authWindow; // держит ссылку на фрейм
+        AuthWindow(String title){
+            super(title);
+            JPanel panelButton = new JPanel();
+            panelButton.setLayout(new GridLayout(7,1));
+            panelButton.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
+            JLabel label_login = new JLabel("Введите логин:");
+            JLabel label_pass = new JLabel("Введите пароль:");
+            JTextField login = new JTextField(11);
+            JTextField password = new JTextField(11);
+            JButton btnEnter = new JButton();
+            if (title.equals("Авторизация"))
+                btnEnter.setText("Войти");
+            else
+                btnEnter.setText("Зарегистрироваться");
+            panelButton.add(label_login);
+            panelButton.add(login);
+            panelButton.add(label_pass);
+            panelButton.add(password);
+
+            panelButton.add(btnEnter);
+            btnEnter.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    if (e.getActionCommand().equals("Войти")){
+                        String loginText = login.getText();
+                        String passText = password.getText();
+                        if (!loginText.equals("") && !passText.equals("")){
+                            LoginAndPasswordMessage loginAndPass = new LoginAndPasswordMessage(loginText, passText);
+                            try {
+                                requests.put(new AuthCommandTask(out, loginAndPass)); // отправили логин, пароль
+                                readMessFromServer(); // получили ответ
+                                authWindow.dispose();
+                                if (messFromServer.equals("OK")) {
+                                    requests.put(new GetFileListCommandTask(out)); // команда на получение списка файлов
+                                    updateServerList(); // ожидаем и обновляем список
+                                    buttonEnt.setEnabled(false);
+                                    buttonAUth.setEnabled(false);
+                                }
+                                else JOptionPane.showMessageDialog(null,
+                                        "<html>Указанного пользователя нет в системе,<br> пожалуйста, зарегистрируйтесь!");
+                            } catch (InterruptedException ex) {
+                                ex.printStackTrace();
+                            }
+
+                        } else
+                            JOptionPane.showMessageDialog(null, "Введите логин и пароль!",
+                                    "Внимание", JOptionPane.INFORMATION_MESSAGE);
+                    }
+                    if (e.getActionCommand().equals("Зарегистрироваться")){
+
+
+                    }
+
+                }
+            });
+            add(panelButton);
+            setBounds(650, 250 , 400, 200);
+            setResizable(false);
+            authWindow = this; // ссылается на самого себя
+            setVisible(true);
+        }
+    }
+
+
+
+//===============================================================================================================================
 
     private void GUI() {
         setTitle("Клиент");
@@ -124,9 +214,10 @@ public class ClientSerial extends JFrame {
         Container c = getContentPane();
         JPanel p1 = new JPanel();
         p1.setLayout(new FlowLayout());
-        JButton buttonEnt = new JButton("Войти");
-        JButton buttonAUth = new JButton("Авторизоваться");
+        buttonEnt = new JButton("Войти");
+        buttonEnt.addActionListener(new EnterButtonListener());
 
+        buttonAUth = new JButton("Регистрация");
         buttonAUth.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -157,6 +248,7 @@ public class ClientSerial extends JFrame {
                 }
             }
         });
+
         JScrollPane paneL = new JScrollPane(clientList);
         JScrollPane paneR = new JScrollPane(listOnServer);
         JPanel paneForList = new JPanel();
@@ -203,8 +295,9 @@ public class ClientSerial extends JFrame {
     private void readMessFromServer() {
         try {
             Object obj = in.readObject();
-            if (obj instanceof Message) {
-                System.out.println(((Message)obj).getMessage());
+            if (obj instanceof SimpleMessage) {
+                messFromServer = ((SimpleMessage)obj).getMessage();
+                System.out.println(messFromServer);
             }
         } catch (IOException | ClassNotFoundException  ex){ex.printStackTrace();}
     }
@@ -245,7 +338,7 @@ public class ClientSerial extends JFrame {
 
     // передача сообщения
     private void writeMess(String message) {
-        Message mess =  new Message(message);
+        SimpleMessage mess =  new SimpleMessage(message);
         try {
             out.writeObject(mess);
             out.flush();
@@ -293,11 +386,13 @@ public class ClientSerial extends JFrame {
         listOnServerModel.clear();
         try {
             Object obj = in.readObject();
-            if (obj instanceof Request ) {
+            if (obj instanceof AbstractMessage) {
                 String[] files = ((ServerListMessage) obj).getFilesList();
-                for (String s: files) {
-                    listOnServerModel.addElement(s);
-                    System.out.println(s);
+                if (files != null) {
+                    for (String s: files) {
+                        listOnServerModel.addElement(s);
+                        System.out.println(s);
+                    }
                 }
             }
         } catch (IOException | ClassNotFoundException ex){ex.printStackTrace();}
@@ -320,4 +415,6 @@ public class ClientSerial extends JFrame {
             System.out.println("Проблема с закрытием сокета");}
 
     }
+
+
 }

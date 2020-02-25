@@ -22,18 +22,36 @@ public class ConnectDB {
 
     }
 
-    // метод для создания таблицы auth в бд DataBase.
-    public void createTable(){
-        try{
-            String query = String.format("CREATE TABLE auth (id integer primary key autoincrement, login varchar not null,  password varchar not null, nick varchar not null)");
-            Statement state = connection.createStatement();
-            state.executeUpdate(query);
-//            String query2 = "INSERT INTO auth (login, password, nick)\n" +
-//                    "VALUES ('login1', 'pass1', 'nick1');";
-//            state = connection.createStatement();
-//            state.executeUpdate(query2);
-        }catch (SQLException ex){}
+    String authorize(String login, String pass) {
+        String login_user = null;
+        String query = "SELECT login, password FROM users WHERE login = '" + login + "'" + " AND password = '" + pass + "'";
+        try {
+            state = connection.createStatement();
+            ResultSet res = state.executeQuery(query);
+            if (res.next()) {
+                login_user = res.getString("login");
+                System.out.println("Пользователь есть в базе");
+            }
+            else {
+                System.out.println("Пользователя нет в базе");
+            }
+        } catch (SQLException ex) {ex.printStackTrace();}
+        return login_user;
     }
+
+    public void writeNewUser() {
+            String query2 = "INSERT INTO users (login, password)\n" +
+            "VALUES ('login1', 'pass1');";
+            try {
+                state = connection.createStatement();
+                state.executeUpdate(query2);
+            } catch (SQLException ex) {ex.printStackTrace();}
+
+    }
+
+
+
+
     // метод для закрытия connection
     void close() {
         try {
@@ -42,10 +60,47 @@ public class ConnectDB {
             System.out.println("Не закрыли" + e.getMessage());
         }
     }
-    //добавляет в базу нового пользователя
-    public String registration(String login, String pass, String nick){
+
+    // метод для создания таблицы auth в бд DataBase.
+    public void createTable(){
+        try{
+            String query = String.format("CREATE TABLE users (id integer primary key autoincrement, login varchar not null,  password varchar not null, unique (login))");
+//            String q = "CREATE TABLE auth (id integer primary key autoincrement, login varchar not null,  password varchar not null, unique (login)";
+            Statement state = connection.createStatement();
+            state.executeUpdate(query);
+
+//            String query2 = "INSERT INTO users (login, password)\n" +
+//                    "VALUES ('login1', 'pass1');";
+//            try {
+//                state = connection.createStatement();
+//                state.executeUpdate(query2);
+//            } catch (SQLException ex) {ex.printStackTrace();}
+
+        }catch (SQLException ex){
+            System.out.println("Проблемы при создании таблицы auth");
+        }
+    }
+
+    public void all() {
+        String queryALL = "SELECT * FROM users";
+        try {
+            state = connection.createStatement();
+            ResultSet res = state.executeQuery(queryALL);
+            System.out.println(res.next() + " есть ли пользователи в базе");
+            while (res.next()) {
+                String log_ = res.getString("login");
+                String pass_ = res.getString("password");
+                System.out.println(log_ + ", " + pass_);
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    //добавляет в базу нового пользователя? надо проверить
+    public String registration(String login, String pass){
         String sss = null;
-        String queryALL = "SELECT * FROM auth";
+        String queryALL = "SELECT * FROM users";
         int count = 0;
         try {
             state = connection.createStatement();
@@ -53,15 +108,14 @@ public class ConnectDB {
             while (res.next()){
                 String log_  = res.getString("login");
                 String pass_  = res.getString("password");
-                String nick_  = res.getString("nick");
-                if (!log_.equals(login) && !pass_.equals(pass) && !nick_.equals(nick)){
+                if (!log_.equals(login) && !pass_.equals(pass)){
                 }else count++;
             }
             if (count == 0){
-                String query = "INSERT INTO auth (login, password, nick) VALUES ('" + login + "', '" + pass + "', '" + nick + "');";
+                String query = "INSERT INTO auth (login, password) VALUES ('" + login + "', '" + pass + "');";
                 state.executeUpdate(query);
                 System.out.println("Регистрация прошла успешно");
-                ResultSet rs = state.executeQuery("SELECT * FROM auth WHERE login = '" + login + "'" + " AND password = '" + pass + "'");
+                ResultSet rs = state.executeQuery("SELECT * FROM users WHERE login = '" + login + "'" + " AND password = '" + pass + "'");
                 sss = rs.getString("nick");
             }else {
                 System.out.println("Регистрация не выполнена");
@@ -70,20 +124,6 @@ public class ConnectDB {
             System.out.println(e);
         }
         return sss;
-    }
-    //==== метод для смены ника
-    String getNewNick(String login, String pass, String nick){
-        String nickName = null;
-        String query = "UPDATE auth SET nick = '" + nick + "' WHERE login = '" + login + "' AND password = '" + pass + "'";
-        try {
-            state = connection.createStatement();
-            state.executeUpdate(query);
-            ResultSet getNewNick = state.executeQuery("SELECT nick FROM auth WHERE login = '" + login + "'" + " AND password = '" + pass + "'");
-            while (getNewNick.next()){
-                nickName = getNewNick.getString("nick");}
-        }catch (SQLException ex){
-            ex.printStackTrace();}
-        return nickName;
     }
 }
 

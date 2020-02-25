@@ -3,25 +3,59 @@ package com.era.cloud.server;
 
 import com.era.cloud.common.*;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.*;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.*;
+import java.sql.Connection;
 
 
 public class MainHandler extends ChannelInboundHandlerAdapter {
-    private String login;
-    private final int MAX_SIZE = 1024;
-    private String rootDir = "server/ServerDir/";
+
+    ConnectDB conDB;
+    private String loginUser;
+    private final int MAX_SIZE = 1024*1024*100;
+    private String rootDirectory = "server/ServerDir/";
+    private String userDirectory;
+
+
+
+   public MainHandler(ConnectDB conDB) {
+       super();
+       this.conDB = conDB;
+   }
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+
+
         try {
             if(msg instanceof CommandMessage) { // если команда
                 CommandMessage com = (CommandMessage) msg;
                 if (com.is_AUTH_OK()) {
+                    Object[] objects = com.getAttachment();
+                    if (objects[0] instanceof LoginAndPasswordMessage) {
+                        LoginAndPasswordMessage log_pass = (LoginAndPasswordMessage)objects[0];
+                        String log = log_pass.getLogin();
+                        String pass = log_pass.getPassword();
+                        loginUser = conDB.authorize(log, pass);
+                        if (loginUser != null) {
+                            SimpleMessage mess = new SimpleMessage("OK");
+                            ctx.writeAndFlush(mess);
+
+                            userDirectory = rootDirectory + loginUser;
+                            System.out.println(userDirectory);
+                            File dir = new File(userDirectory);
+                            if (dir.isDirectory()) { // если по указанному пути есть каталог
+                                userDirectory += "/";
+                            } else {
+                                boolean created = dir.mkdir(); // создали новый коталог
+                                if(created){userDirectory += "/";}
+                            }
+                        }
+                        else {SimpleMessage mess = new SimpleMessage("NO");
+                            ctx.writeAndFlush(mess);}
+                    }
                 }
                 if (com.is_FILES_LIST())
                     writeFileList(ctx);
@@ -32,14 +66,14 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
             } else
             if (msg instanceof UploadFile) { // если файл
                 UploadFile file = (UploadFile) msg;
-                writeFileInDir(file);
+                writingFileToStorage(file);
             }
             else
-            if (msg instanceof Message) { // если сообщение
-                String mes = ((Message) msg).getMessage();
+            if (msg instanceof SimpleMessage) { // если сообщение
+                String mes = ((SimpleMessage) msg).getMessage();
                 System.out.println("От клиента: " + mes);
                 // ответ сервера
-                Message mess = new Message("Сервер получил сообщение: " + mes);
+                SimpleMessage mess = new SimpleMessage("Сервер получил сообщение: " + mes);
                 ctx.writeAndFlush(mess);
             }
 
@@ -56,22 +90,25 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         ctx.close();
     }
 
-    private void writeFileList(ChannelHandlerContext ctx) { // список файлов на сервере
-        File dir = new File(rootDir);
-        Request serList = new ServerListMessage(dir.list());
+
+    // список файлов на сервере
+    private void writeFileList(ChannelHandlerContext ctx) {
+        File dir = new File(userDirectory);
+        ServerListMessage serList = new ServerListMessage(dir.list());
         ctx.writeAndFlush(serList);
     }
 
     // запись файла на диск
-    private void writeFileInDir(UploadFile file) {
+    private void writingFileToStorage(UploadFile file) {
         boolean append = true;
         String fileName = file.getName();
-        String filePath = rootDir + fileName;
+        String filePath = userDirectory + fileName;
         if (file.getPartNumber() == 1) { // если файл состоит из одной части, то не дописываем
             append = false;
         }
         try {
             File writeFile = new File(filePath);
+            System.out.println(writeFile);
             FileOutputStream out = new FileOutputStream(writeFile, append);
             out.write(file.getData()); // записали в файл
             out.close();
@@ -81,7 +118,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
 
     // передача файла
     private void writeFile(String fileName, ChannelHandlerContext ctx){
-        File file = new File(rootDir + fileName);
+        File file = new File(userDirectory + fileName);
         int len = (int)file.length();
         UploadFile req = new UploadFile(file);
         int partNumber = 1;

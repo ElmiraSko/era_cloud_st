@@ -1,9 +1,10 @@
-package com.era.cloud.common;
+package com.era.cloud.client;
 
-import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
+
+import com.era.cloud.common.CommandMessage;
+import com.era.cloud.common.UploadFile;
 import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
 
-import javax.swing.*;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -11,26 +12,22 @@ import java.io.IOException;
 
 import static com.era.cloud.common.CommandMessage.CMD_MSG_FILES_LIST;
 
-public class SendFileTask implements Task {
-    private final int MAX_SIZE = 1024;
+public class SendFileTask implements Task{
+    private final int MAX_SIZE = 1024*1024*100;
 
     private String filePath;
-    private ObjectDecoderInputStream in;
     private ObjectEncoderOutputStream out;
-    private DefaultListModel<String> listOnServerModel;
 
-    public SendFileTask(String filePath, ObjectDecoderInputStream in, ObjectEncoderOutputStream out, DefaultListModel<String> listOnServerModel){
+    public SendFileTask(String filePath, ObjectEncoderOutputStream out){
         this.filePath = filePath;
-        this.in = in;
         this.out = out;
-        this.listOnServerModel = listOnServerModel;
     }
 
     @Override
     public void doing() {
         File file = new File(filePath);
         int len = (int)file.length();
-        UploadFile req = new UploadFile(file);
+        UploadFile req = new UploadFile(file); // пересмотреть для оптимизации
         int partNumber = 1;
         req.setPartNumber(partNumber);
         try {
@@ -59,8 +56,9 @@ public class SendFileTask implements Task {
             e.printStackTrace();
         }        System.out.println();
         System.out.println("Клиент отправил файл: " + file.getName());
-        getFileListFromServer();
+//        getFileListFromServer();
     }
+
 
     // запрос на получение списка файлов находящихся на сервере
     private void getFileListFromServer() {
@@ -71,3 +69,4 @@ public class SendFileTask implements Task {
         } catch (IOException ex) {ex.printStackTrace();}
     }
 }
+

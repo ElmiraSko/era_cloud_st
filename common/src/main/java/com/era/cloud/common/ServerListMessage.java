@@ -1,8 +1,7 @@
 package com.era.cloud.common;
 
-import java.io.Serializable;
 
-public class ServerListMessage extends Request {
+public class ServerListMessage extends AbstractMessage {
     private String[] filesList;
 
     public ServerListMessage(String[] list) {

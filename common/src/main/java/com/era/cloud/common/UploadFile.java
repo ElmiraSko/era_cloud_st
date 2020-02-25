@@ -3,7 +3,7 @@ package com.era.cloud.common;
 import java.io.File;
 import java.io.Serializable;
 
-public class UploadFile extends Request {
+public class UploadFile extends AbstractMessage {
 
     private String name;
     private byte[] data;

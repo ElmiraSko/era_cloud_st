@@ -1,8 +1,8 @@
 package com.era.cloud.common;
 
-public class Message extends Request {
+public class SimpleMessage extends AbstractMessage {
     private String message;
-    public Message(String mess) {
+    public SimpleMessage(String mess) {
         message = mess;
     }
 
