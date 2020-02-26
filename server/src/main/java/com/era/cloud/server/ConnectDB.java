@@ -21,7 +21,7 @@ public class ConnectDB {
         }
 
     }
-
+// авторизация, проверяем, есть ли юзер в база
     String authorize(String login, String pass) {
         String login_user = null;
         String query = "SELECT login, password FROM users WHERE login = '" + login + "'" + " AND password = '" + pass + "'";
@@ -39,14 +39,16 @@ public class ConnectDB {
         return login_user;
     }
 
-    public void writeNewUser() {
-            String query2 = "INSERT INTO users (login, password)\n" +
-            "VALUES ('login1', 'pass1');";
-            try {
-                state = connection.createStatement();
-                state.executeUpdate(query2);
-            } catch (SQLException ex) {ex.printStackTrace();}
-
+    // добавление нового пользователя
+    void writeNewUser(String login, String pass) {
+        String query = "INSERT INTO users (login, password) VALUES ('" + login + "', '" + pass + "');";
+        try {
+            state = connection.createStatement();
+            state.executeUpdate(query);
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            System.out.println("Проблемы с регистрацией");
+        }
     }
 
 
@@ -95,35 +97,6 @@ public class ConnectDB {
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
-    }
-
-    //добавляет в базу нового пользователя? надо проверить
-    public String registration(String login, String pass){
-        String sss = null;
-        String queryALL = "SELECT * FROM users";
-        int count = 0;
-        try {
-            state = connection.createStatement();
-            ResultSet res = state.executeQuery(queryALL);
-            while (res.next()){
-                String log_  = res.getString("login");
-                String pass_  = res.getString("password");
-                if (!log_.equals(login) && !pass_.equals(pass)){
-                }else count++;
-            }
-            if (count == 0){
-                String query = "INSERT INTO auth (login, password) VALUES ('" + login + "', '" + pass + "');";
-                state.executeUpdate(query);
-                System.out.println("Регистрация прошла успешно");
-                ResultSet rs = state.executeQuery("SELECT * FROM users WHERE login = '" + login + "'" + " AND password = '" + pass + "'");
-                sss = rs.getString("nick");
-            }else {
-                System.out.println("Регистрация не выполнена");
-            }
-        } catch (SQLException e) {
-            System.out.println(e);
-        }
-        return sss;
     }
 }
 

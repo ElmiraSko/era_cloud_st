@@ -7,25 +7,20 @@ import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
 import javax.swing.*;
 import java.io.IOException;
 
-public class UploadServerListTask implements Task { // пока не используем
+public class UpdateServerListTask implements Task { // пока не используем
 
-    private DefaultListModel<String> listOnServerModel = new DefaultListModel<>();
+    private DefaultListModel<String> listOnServerModel;
     private ObjectDecoderInputStream in;
 
 
-    UploadServerListTask(ObjectDecoderInputStream in) {
+    UpdateServerListTask(ObjectDecoderInputStream in, DefaultListModel<String> listOnServerModel) {
         this.in = in;
-    }
-
-    public DefaultListModel<String> getListOnServerModel() {
-        return listOnServerModel;
+        this.listOnServerModel = listOnServerModel;
     }
 
     @Override
     public void doing() {
-//        DefaultListModel<String> listModel = new DefaultListModel<>();
-//        listOnServerModel.clear();
-        System.out.println("jjjjjjjjjjjjjjjjjjjjjjjjjj");
+        listOnServerModel.clear();
         try {
             Object obj = in.readObject();
             if (obj instanceof AbstractMessage) {
