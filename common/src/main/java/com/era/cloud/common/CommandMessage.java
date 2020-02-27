@@ -9,7 +9,8 @@ public class CommandMessage extends AbstractMessage {
 
     private int type;
     private Object[] attachment;
-    private String str;
+    private String fileName;
+
 // клнструкторы
     public CommandMessage(int type) {
         this.type = type;
@@ -20,17 +21,17 @@ public class CommandMessage extends AbstractMessage {
         this.attachment = attachment;
     }
 
-    public CommandMessage(int type, String str) {
+    public CommandMessage(int type, String fileName) {
         this.type = type;
-        this.str = str;
+        this.fileName = fileName;
     }
-//
+
     public int getType() {
         return type;
-    } //
+    }
 
-    public String getStr() {
-        return str;
+    public String getFileName() {
+        return fileName;
     }
 
     public Object[] getAttachment() {

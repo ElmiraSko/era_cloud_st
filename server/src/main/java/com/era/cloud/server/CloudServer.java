@@ -22,8 +22,6 @@ public class CloudServer {
 
     private CloudServer() {
         connectDB = new ConnectDB();
-//        connectDB.all();
-
     }
 
 

@@ -67,19 +67,11 @@ public class ConnectDB {
     public void createTable(){
         try{
             String query = String.format("CREATE TABLE users (id integer primary key autoincrement, login varchar not null,  password varchar not null, unique (login))");
-//            String q = "CREATE TABLE auth (id integer primary key autoincrement, login varchar not null,  password varchar not null, unique (login)";
+//            String q = "CREATE TABLE users (id integer primary key autoincrement, login varchar not null,  password varchar not null, unique (login)";
             Statement state = connection.createStatement();
             state.executeUpdate(query);
-
-//            String query2 = "INSERT INTO users (login, password)\n" +
-//                    "VALUES ('login1', 'pass1');";
-//            try {
-//                state = connection.createStatement();
-//                state.executeUpdate(query2);
-//            } catch (SQLException ex) {ex.printStackTrace();}
-
         }catch (SQLException ex){
-            System.out.println("Проблемы при создании таблицы auth");
+            System.out.println("Проблемы при создании таблицы users");
         }
     }
 

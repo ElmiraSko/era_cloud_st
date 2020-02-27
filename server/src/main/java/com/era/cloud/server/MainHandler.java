@@ -30,9 +30,9 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
 
         try {
             if(msg instanceof CommandMessage) { // если полученный объект - команда
-                CommandMessage com = (CommandMessage) msg;
-                if (com.is_AUTH_OK()) { // если это команда аутентификации
-                    Object[] objects = com.getAttachment();
+                CommandMessage command = (CommandMessage) msg;
+                if (command.is_AUTH_OK()) { // если это команда аутентификации
+                    Object[] objects = command.getAttachment();
                     if (objects[0] instanceof LoginAndPasswordMessage) {
                         LoginAndPasswordMessage log_pass = (LoginAndPasswordMessage)objects[0];
                         String log = log_pass.getLogin();
@@ -66,11 +66,15 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                             }
                     }
                 }
-                if (com.is_FILES_LIST())
-                    writeFileList(ctx);
-                if (com.is_FILE_DOWNLOAD()) {
-                    String str = com.getStr();
-                    writeFile(str, ctx);
+                if (command.is_FILES_LIST()) // если команда на формирование списка файлов
+                    fileListToClient(ctx);
+                if (command.is_FILE_DOWNLOAD()) { // команда на скачивание файла
+                    String fileName = command.getFileName();
+                    sendFileToClient(fileName, ctx);
+                }
+                if (command.is_SERVER_DELETE_FILE()) { // если команда на удаление файла
+                    String fileName = command.getFileName();
+                    deleteFile(fileName);
                 }
             } else
                 if (msg instanceof UploadFile) { // если получен файл от клиента
@@ -100,7 +104,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
 
 
     // список файлов на сервере
-    private void writeFileList(ChannelHandlerContext ctx) {
+    private void fileListToClient(ChannelHandlerContext ctx) {
         File dir = new File(userDirectory);
         ServerListMessage serList = new ServerListMessage(dir.list());
         ctx.writeAndFlush(serList);
@@ -124,8 +128,8 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         System.out.println("От клиента: получен файл " + fileName);
     }
 
-    // передача файла
-    private void writeFile(String fileName, ChannelHandlerContext ctx){
+    // передача файла клиенту
+    private void sendFileToClient(String fileName, ChannelHandlerContext ctx){
         File file = new File(userDirectory + fileName);
         int len = (int)file.length();
         UploadFile req = new UploadFile(file);
@@ -157,4 +161,12 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         System.out.println("Сервер отправил файл: " + fileName);
     }
 
+    private void deleteFile(String fileName){
+        File file = new File(userDirectory + fileName);
+        if (file.exists()) {
+           boolean del = file.delete();
+           if (del) System.out.println("Файл удален.");
+           else System.out.println("Ошибка при удалении файла.");
+        }
+    }
 }

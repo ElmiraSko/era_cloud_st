@@ -9,5 +9,4 @@ public class SimpleMessage extends AbstractMessage {
     public String getMessage() {
         return message;
     }
-
 }
