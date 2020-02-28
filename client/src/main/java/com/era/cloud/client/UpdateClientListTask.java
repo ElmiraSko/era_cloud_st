@@ -21,7 +21,8 @@ public class UpdateClientListTask implements Task {
         if (filesAndDirectory != null) {
             for (File s : filesAndDirectory){
                 clientListModel.addElement(s);
-            System.out.println(s);}
+//            System.out.println(s);
+            }
         }
         else System.out.println("Возникла проблема при обновлении файлов!");
     }

@@ -6,11 +6,11 @@ import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
 
 public class WriteFileToClientDirectoryTask implements Task {
     private ObjectDecoderInputStream in;
     private File clientDirectory;
-
 
     WriteFileToClientDirectoryTask(ObjectDecoderInputStream in, File clientDirectory) {
         this.in = in;
@@ -19,13 +19,22 @@ public class WriteFileToClientDirectoryTask implements Task {
 
     @Override
     public void doing() {
-        try {
-            Object object = in.readObject();
-            if (object instanceof UploadFile) { // если файл
-                UploadFile file = (UploadFile) object;
-                writeFileInDir(file);
+        while (true){
+                try {
+                    Object object = in.readObject();
+                    if (object instanceof UploadFile) { // если файл
+                        UploadFile file = (UploadFile) object;
+                        int count = file.getCountNumber();
+                        System.out.println(count + "  - count");
+                        int part = file.getPartNumber();
+                        System.out.println(part + "  - part");
+                        writeFileInDir(file);
+                        if (part == count) {
+                            break;
+                        }
+                    }
+                } catch (IOException | ClassNotFoundException ex) {ex.printStackTrace();}
             }
-        } catch (IOException | ClassNotFoundException ex) {ex.printStackTrace();}
     }
 
     // запись файла на диск клиента

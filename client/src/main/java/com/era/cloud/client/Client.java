@@ -36,7 +36,7 @@ public class Client extends JFrame {
     private DefaultListModel<String> listOnServerModel = new DefaultListModel<>();
     private DefaultListModel<File> clientListModel;
 
-    private ArrayBlockingQueue<Task> requests = new ArrayBlockingQueue<>(5);
+    private ArrayBlockingQueue<Task> requests = new ArrayBlockingQueue<>(10);
     private boolean isFile = false;  // true - если файл
     private JButton backButton, buttonEnt, buttonAUth, button1, button2, button3;
     private String messFromServer = "message";
@@ -65,6 +65,7 @@ public class Client extends JFrame {
                 try {
                     Task task = requests.take();
                     task.doing();
+                    System.out.println("Задача выполнена");
                 } catch (InterruptedException ex) {
                     ex.printStackTrace();
                 }
@@ -75,7 +76,7 @@ public class Client extends JFrame {
     private void connect() {
         try {
             socket = new Socket("localhost", 8189);
-            out = new ObjectEncoderOutputStream(socket.getOutputStream());
+            out = new ObjectEncoderOutputStream(socket.getOutputStream(), 100 * 1024 * 1024);
             in = new ObjectDecoderInputStream(socket.getInputStream(), 100 * 1024 * 1024);
             System.out.println("Клиент подключился");
         } catch (IOException e) {

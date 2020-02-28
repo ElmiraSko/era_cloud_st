@@ -14,7 +14,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
 
     private ConnectDB conDB;
     private String loginUser;
-    private final int MAX_SIZE = 1024*1024*100;
+    private final int MAX_SIZE = 1024*1024;
     private String rootDirectory = "server/ServerDir/";
     private String userDirectory;
 
@@ -69,6 +69,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                 if (command.is_FILES_LIST()) // если команда на формирование списка файлов
                     fileListToClient(ctx);
                 if (command.is_FILE_DOWNLOAD()) { // команда на скачивание файла
+                    System.out.println("Поступила команда на скачивание");
                     String fileName = command.getFileName();
                     sendFileToClient(fileName, ctx);
                 }
@@ -79,7 +80,9 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
             } else
                 if (msg instanceof UploadFile) { // если получен файл от клиента
                     UploadFile file = (UploadFile) msg;
+                    System.out.println(" Пришел файл от клиента");
                     writingFileToStorage(file);
+
             } else
                 if (msg instanceof SimpleMessage) { // если сообщение
                     String mes = ((SimpleMessage) msg).getMessage();
@@ -120,7 +123,6 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         }
         try {
             File writeFile = new File(filePath);
-            System.out.println(writeFile);
             FileOutputStream out = new FileOutputStream(writeFile, append);
             out.write(file.getData()); // записали в файл
             out.close();
@@ -134,18 +136,30 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         int len = (int)file.length();
         UploadFile req = new UploadFile(file);
         int partNumber = 1;
-        req.setPartNumber(partNumber);
         try {
-            FileInputStream inp = new FileInputStream(file);
-            BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
             if (len <= MAX_SIZE) {
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, len);
                 req.setData(new byte[len]);
+                req.setPartNumber(partNumber);
+                req.setCountNumber(partNumber);
                 buff.read(req.getData());
                 ctx.writeAndFlush(req);
+                buff.close();
             } else { // если длина файла превышает ограничение на передаваемый объем
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
+                int countPart = len/MAX_SIZE + 1;
                 while (len > 0) {  // пока все не считали
+                    if (len > MAX_SIZE) {
+                        buff = new BufferedInputStream(inp, MAX_SIZE);
+                        req.setData(new byte[MAX_SIZE]);
+                    } else {
+                        buff = new BufferedInputStream(inp, len);
+                        req.setData(new byte[len]);
+                    }
                     req.setPartNumber(partNumber); // устанавливаем номер посылки
-                    req.setData(new byte[MAX_SIZE]); // обновляем массив для данных
+                    req.setCountNumber(countPart);
                     if ((buff.available()) > 0) {
                         buff.read(req.getData()); // записываем в массив данные
                     }
@@ -153,8 +167,8 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                     partNumber++;
                     ctx.writeAndFlush(req); // отправляем посылку
                 }
+                buff.close();
             }
-            buff.close();
         } catch (IOException e) {
             e.printStackTrace();
         }        System.out.println();

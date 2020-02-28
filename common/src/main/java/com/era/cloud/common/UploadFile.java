@@ -10,6 +10,7 @@ public class UploadFile extends AbstractMessage {
     private int size; // удалить
 
     private int partNumber; // номер части
+    private int countNumber;
 
     public UploadFile(File file) {
         name = file.getName();
@@ -34,5 +35,13 @@ public class UploadFile extends AbstractMessage {
 
     public void setPartNumber(int partNumber) {
         this.partNumber = partNumber;
+    }
+
+    public int getCountNumber() {
+        return countNumber;
+    }
+
+    public void setCountNumber(int countNumber) {
+        this.countNumber = countNumber;
     }
 }

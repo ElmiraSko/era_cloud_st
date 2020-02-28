@@ -13,7 +13,7 @@ import java.io.IOException;
 import static com.era.cloud.common.CommandMessage.CMD_MSG_FILES_LIST;
 
 public class SendFileTask implements Task{
-    private final int MAX_SIZE = 1024*1024*100;
+    private final int MAX_SIZE = 1024*1024;
 
     private String filePath;
     private ObjectEncoderOutputStream out;
@@ -29,44 +29,46 @@ public class SendFileTask implements Task{
         int len = (int)file.length();
         UploadFile req = new UploadFile(file); // пересмотреть для оптимизации
         int partNumber = 1;
-        req.setPartNumber(partNumber);
         try {
-            FileInputStream inp = new FileInputStream(file);
-            BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
             if (len <= MAX_SIZE) {
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, len);
                 req.setData(new byte[len]);
+                req.setPartNumber(partNumber);
                 buff.read(req.getData());
                 out.writeObject(req);
                 out.flush();
+                buff.close();
             } else {
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
+                int countPart = len/MAX_SIZE + 1;
                 while (len > 0) {
+                    if (len > MAX_SIZE) {
+                        buff = new BufferedInputStream(inp, MAX_SIZE);
+                        req.setData(new byte[MAX_SIZE]);
+                    } else {
+                        buff = new BufferedInputStream(inp, len);
+                        req.setData(new byte[len]);
+                    }
                     req.setPartNumber(partNumber);
-                    req.setData(new byte[MAX_SIZE]);
+                    req.setCountNumber(countPart);
                     if ((buff.available()) > 0) {
                         buff.read(req.getData());
                     }
                     len = len - MAX_SIZE;
+                    System.out.println(" Осталось прочитать еще " + len);
                     partNumber++;
                     out.writeObject(req);
                     out.flush();
                 }
+                buff.close();
+
             }
-            buff.close();
         } catch (IOException e) {
             e.printStackTrace();
         }        System.out.println();
         System.out.println("Клиент отправил файл: " + file.getName());
-//        getFileListFromServer();
-    }
-
-
-    // запрос на получение списка файлов находящихся на сервере
-    private void getFileListFromServer() {
-        CommandMessage message = new CommandMessage(CMD_MSG_FILES_LIST);
-        try {
-            out.writeObject(message);
-            out.flush();
-        } catch (IOException ex) {ex.printStackTrace();}
     }
 }
 
