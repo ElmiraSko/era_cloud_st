@@ -19,11 +19,9 @@ import java.sql.Statement;
 public class CloudServer {
     private ConnectDB connectDB;
 
-
     private CloudServer() {
         connectDB = new ConnectDB();
     }
-
 
     private void run() throws Exception {
 

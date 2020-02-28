@@ -15,8 +15,12 @@
 Реализовала удаление файлов как на стороне клиента, так и на сервере. Есть возможность регистрировать нового клиента.
 У каждого клиента с логином login1 создается своя папка login1 (server/ServerDir/login1).
 
-// ============== Класс клиента ========================
+Задача по обновленю клиентского списка выполняется, но графический интерфейс не обновляется, особенно,
+если получаемый или удаляемый файл большой.
+
+// ============== Клиент ============================
 package com.era.cloud.client;
+
 
 import com.era.cloud.common.*;
 import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
@@ -46,14 +50,14 @@ public class Client extends JFrame {
     private File[] roots = File.listRoots();
     private File clientFile = roots[0]; // диск С:
     private File parentClientFile = clientFile;
-    private String serverSideFileName = ""; // ссылка на имя файла на стороне сервера
+    private String serverSideFileName = ""; // пустая строка
 
     private JTextField textField;
     private JList<File> clientList; // клиентский список
     private DefaultListModel<String> listOnServerModel = new DefaultListModel<>();
     private DefaultListModel<File> clientListModel;
 
-    private ArrayBlockingQueue<Task> requests = new ArrayBlockingQueue<>(5);
+    private ArrayBlockingQueue<Task> requests = new ArrayBlockingQueue<>(10);
     private boolean isFile = false;  // true - если файл
     private JButton backButton, buttonEnt, buttonAUth, button1, button2, button3;
     private String messFromServer = "message";
@@ -82,6 +86,7 @@ public class Client extends JFrame {
                 try {
                     Task task = requests.take();
                     task.doing();
+                    System.out.println("Задача выполнена");
                 } catch (InterruptedException ex) {
                     ex.printStackTrace();
                 }
@@ -92,7 +97,7 @@ public class Client extends JFrame {
     private void connect() {
         try {
             socket = new Socket("localhost", 8189);
-            out = new ObjectEncoderOutputStream(socket.getOutputStream());
+            out = new ObjectEncoderOutputStream(socket.getOutputStream(), 100 * 1024 * 1024);
             in = new ObjectDecoderInputStream(socket.getInputStream(), 100 * 1024 * 1024);
             System.out.println("Клиент подключился");
         } catch (IOException e) {
@@ -387,6 +392,7 @@ public class Client extends JFrame {
         }
     }
 
+
     // Активация, деактивация кнопок
     private void setEnabledAllButton() {
         buttonEnt.setEnabled(false);
@@ -397,7 +403,7 @@ public class Client extends JFrame {
         backButton.setEnabled(true);
     }
 
-    //-----------------------------------------------------------------
+    //=========================================================================
 // вспомогательное окно для авторизации, регистрации нового пользователя
     class AuthWindow extends JFrame {
         private JTextField login, password;
@@ -474,7 +480,7 @@ public class Client extends JFrame {
         }
     }
 
-    //============= Два метода вызываются в gui: =========================
+    //Два метода вызываются в gui:
     // получение ответа от сервера
     private void readMessFromServer() {
         try {
@@ -531,9 +537,47 @@ public class Client extends JFrame {
         }
 
     }
-}
-//================= task по удалению файла: class DeleteFileOnServerTask ====== в модуле клиента ======================
+}  // Конец класса Клиента
 
+//===========================
+package com.era.cloud.client;
+
+public interface Task {
+    void doing();
+}
+//===========================
+package com.era.cloud.client;
+
+import com.era.cloud.common.CommandMessage;
+import com.era.cloud.common.LoginAndPasswordMessage;
+import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
+
+import java.io.IOException;
+
+import static com.era.cloud.common.CommandMessage.CMD_MSG_AUTH_OK;
+
+public class AuthCommandTask implements Task { // задача передать команду для авторизации с объектом содержащим логин и пароль
+    private LoginAndPasswordMessage loginAndPass; // сообщение
+    private ObjectEncoderOutputStream out;
+
+    AuthCommandTask( ObjectEncoderOutputStream out, LoginAndPasswordMessage loginAndPass) {
+        this.out = out;
+        this.loginAndPass = loginAndPass;
+    }
+    @Override
+    public void doing() {
+        CommandMessage message = new CommandMessage(CMD_MSG_AUTH_OK, loginAndPass);
+        try {
+            out.writeObject(message);
+            out.flush();
+        } catch (IOException ex) {ex.printStackTrace();}
+    }
+
+}
+// ======================================
+package com.era.cloud.client;
+
+import com.era.cloud.common.CommandMessage;
 import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
 
 import java.io.IOException;
@@ -555,159 +599,31 @@ public class DeleteFileOnServerTask implements Task { // отправка ком
         } catch (IOException e) {e.printStackTrace();}
     }
 }
-//------------------------------------------------
+//==========================================================
 package com.era.cloud.client;
-
-import javax.swing.*;
-import java.io.File;
-import java.io.FileFilter;
-
-public class UpdateClientListTask implements Task {
-
-    private DefaultListModel<File> clientListModel; // модель клиентского списка
-    private File clientFile;  // путь к файлу
-
-    UpdateClientListTask(DefaultListModel<File> clientListModel, File clientFile) {
-        this.clientListModel = clientListModel;
-        this.clientFile = clientFile;
-    }
-
-    @Override
-    public void doing() {
-        clientListModel.clear();
-        File[] filesAndDirectory = clientFile.listFiles(new MyFilter());
-        if (filesAndDirectory != null) {
-            for (File s : filesAndDirectory){
-                clientListModel.addElement(s);
-            System.out.println(s);}
-        }
-        else System.out.println("Возникла проблема при обновлении файлов!");
-    }
-
-    private class MyFilter implements FileFilter {
-
-        @Override
-        public boolean accept(File pathname) {
-            return !pathname.isHidden();
-        }
-    }
-}
-//--------------------------------------------------------------
-package com.era.cloud.client;
-
-import com.era.cloud.common.UploadFile;
-import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-
-public class WriteFileToClientDirectoryTask implements Task {
-    private ObjectDecoderInputStream in;
-    private File clientDirectory;
-
-
-    WriteFileToClientDirectoryTask(ObjectDecoderInputStream in, File clientDirectory) {
-        this.in = in;
-        this.clientDirectory = clientDirectory;
-    }
-
-    @Override
-    public void doing() {
-        try {
-            Object object = in.readObject();
-            if (object instanceof UploadFile) { // если файл
-                UploadFile file = (UploadFile) object;
-                writeFileInDir(file);
-            }
-        } catch (IOException | ClassNotFoundException ex) {ex.printStackTrace();}
-    }
-
-    // запись файла на диск клиента
-    private void writeFileInDir(UploadFile file) {
-        boolean append = true;
-        String fileName = file.getName();
-        String filePath = clientDirectory + "/" + fileName;
-        if (file.getPartNumber() == 1) { // если файл состоит из одной части, то не дописываем
-            append = false;
-        }
-        try {
-            File writeFile = new File(filePath);
-            if (!writeFile.exists()) {
-                writeFile.createNewFile();
-            }
-            FileOutputStream out = new FileOutputStream(writeFile, append);
-            out.write(file.getData()); // записали в файл
-            out.close();
-        } catch (IOException ex) {
-            ex.printStackTrace();
-            System.out.println("В методе writeFileInDir возникли проблемы.");}
-        System.out.println("От сервера: получен файл " + fileName);
-    }
-
-}
-//-----------------------------------------
-package com.era.cloud.client;
-
 
 import com.era.cloud.common.CommandMessage;
-import com.era.cloud.common.UploadFile;
 import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 
-import static com.era.cloud.common.CommandMessage.CMD_MSG_FILES_LIST;
-
-public class SendFileTask implements Task{
-    private final int MAX_SIZE = 1024*1024*100;
-
-    private String filePath;
+public class DownloadFileFromServerCommandTask implements Task {
+    private CommandMessage com;
     private ObjectEncoderOutputStream out;
 
-    public SendFileTask(String filePath, ObjectEncoderOutputStream out){
-        this.filePath = filePath;
+    DownloadFileFromServerCommandTask(CommandMessage com, ObjectEncoderOutputStream out) {
+        this.com = com;
         this.out = out;
     }
-
     @Override
     public void doing() {
-        File file = new File(filePath);
-        int len = (int)file.length();
-        UploadFile req = new UploadFile(file); // пересмотреть для оптимизации
-        int partNumber = 1;
-        req.setPartNumber(partNumber);
         try {
-            FileInputStream inp = new FileInputStream(file);
-            BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
-            if (len <= MAX_SIZE) {
-                req.setData(new byte[len]);
-                buff.read(req.getData());
-                out.writeObject(req);
-                out.flush();
-            } else {
-                while (len > 0) {
-                    req.setPartNumber(partNumber);
-                    req.setData(new byte[MAX_SIZE]);
-                    if ((buff.available()) > 0) {
-                        buff.read(req.getData());
-                    }
-                    len = len - MAX_SIZE;
-                    partNumber++;
-                    out.writeObject(req);
-                    out.flush();
-                }
-            }
-            buff.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }        System.out.println();
-        System.out.println("Клиент отправил файл: " + file.getName());
+            out.writeObject(com);
+            out.flush();
+        } catch (IOException ex) {ex.printStackTrace();}
     }
 }
-//------------------------------------------------------------
+//=============================================
 package com.era.cloud.client;
 
 
@@ -736,32 +652,363 @@ public class GetFileListCommandTask implements Task {
     }
 }
 
-//-------------------------------------------
+//========================================================
 package com.era.cloud.client;
 
+
 import com.era.cloud.common.CommandMessage;
+import com.era.cloud.common.UploadFile;
 import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
 
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 
-public class DownloadFileFromServerCommandTask implements Task {
-    private CommandMessage com;
+import static com.era.cloud.common.CommandMessage.CMD_MSG_FILES_LIST;
+
+public class SendFileTask implements Task{
+    private final int MAX_SIZE = 1024*1024;
+
+    private String filePath;
     private ObjectEncoderOutputStream out;
 
-    DownloadFileFromServerCommandTask(CommandMessage com, ObjectEncoderOutputStream out) {
-        this.com = com;
+    public SendFileTask(String filePath, ObjectEncoderOutputStream out){
+        this.filePath = filePath;
         this.out = out;
     }
+
     @Override
     public void doing() {
+        File file = new File(filePath);
+        int len = (int)file.length();
+        UploadFile req = new UploadFile(file); // пересмотреть для оптимизации
+        int partNumber = 1;
         try {
-            out.writeObject(com);
-            out.flush();
-        } catch (IOException ex) {ex.printStackTrace();}
+            if (len <= MAX_SIZE) {
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, len);
+                req.setData(new byte[len]);
+                req.setPartNumber(partNumber);
+                buff.read(req.getData());
+                out.writeObject(req);
+                out.flush();
+                buff.close();
+            } else {
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
+                int countPart = len/MAX_SIZE + 1;
+                while (len > 0) {
+                    if (len > MAX_SIZE) {
+                        buff = new BufferedInputStream(inp, MAX_SIZE);
+                        req.setData(new byte[MAX_SIZE]);
+                    } else {
+                        buff = new BufferedInputStream(inp, len);
+                        req.setData(new byte[len]);
+                    }
+                    req.setPartNumber(partNumber);
+                    req.setCountNumber(countPart);
+                    if ((buff.available()) > 0) {
+                        buff.read(req.getData());
+                    }
+                    len = len - MAX_SIZE;
+                    System.out.println(" Осталось прочитать еще " + len);
+                    partNumber++;
+                    out.writeObject(req);
+                    out.flush();
+                }
+                buff.close();
+
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }        System.out.println();
+        System.out.println("Клиент отправил файл: " + file.getName());
     }
 }
 
-//================= Сервер:  ===========================
+//=======================================================
+package com.era.cloud.client;
+
+import javax.swing.*;
+import java.io.File;
+import java.io.FileFilter;
+
+public class UpdateClientListTask implements Task {
+
+    private DefaultListModel<File> clientListModel; // модель клиентского списка
+    private File clientFile;  // путь к файлу
+
+    UpdateClientListTask(DefaultListModel<File> clientListModel, File clientFile) {
+        this.clientListModel = clientListModel;
+        this.clientFile = clientFile;
+    }
+
+    @Override
+    public void doing() {
+        clientListModel.clear();
+        File[] filesAndDirectory = clientFile.listFiles(new MyFilter());
+        if (filesAndDirectory != null) {
+            for (File s : filesAndDirectory){
+                clientListModel.addElement(s);
+//            System.out.println(s);
+            }
+        }
+        else System.out.println("Возникла проблема при обновлении файлов!");
+    }
+
+    private class MyFilter implements FileFilter {
+
+        @Override
+        public boolean accept(File pathname) {
+            return !pathname.isHidden();
+        }
+    }
+}
+//=====================
+package com.era.cloud.client;
+
+import com.era.cloud.common.UploadFile;
+import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+
+public class WriteFileToClientDirectoryTask implements Task {
+    private ObjectDecoderInputStream in;
+    private File clientDirectory;
+
+    WriteFileToClientDirectoryTask(ObjectDecoderInputStream in, File clientDirectory) {
+        this.in = in;
+        this.clientDirectory = clientDirectory;
+    }
+
+    @Override
+    public void doing() {
+        while (true){
+                try {
+                    Object object = in.readObject();
+                    if (object instanceof UploadFile) { // если файл
+                        UploadFile file = (UploadFile) object;
+                        int count = file.getCountNumber();
+                        System.out.println(count + "  - count");
+                        int part = file.getPartNumber();
+                        System.out.println(part + "  - part");
+                        writeFileInDir(file);
+                        if (part == count) {
+                            break;
+                        }
+                    }
+                } catch (IOException | ClassNotFoundException ex) {ex.printStackTrace();}
+            }
+    }
+
+    // запись файла на диск клиента
+    private void writeFileInDir(UploadFile file) {
+        boolean append = true;
+        String fileName = file.getName();
+        String filePath = clientDirectory + "/" + fileName;
+        if (file.getPartNumber() == 1) { // если файл состоит из одной части, то не дописываем
+            append = false;
+        }
+        try {
+            File writeFile = new File(filePath);
+            if (!writeFile.exists()) {
+                writeFile.createNewFile();
+            }
+            FileOutputStream out = new FileOutputStream(writeFile, append);
+            out.write(file.getData()); // записали в файл
+            out.close();
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            System.out.println("В методе writeFileInDir возникли проблемы.");}
+        System.out.println("От сервера: получен файл " + fileName);
+    }
+
+}
+//========== Классы модуля common ====================
+package com.era.cloud.common;
+import java.io.Serializable;
+public abstract class AbstractMessage implements Serializable {
+}
+
+//----------------
+package com.era.cloud.common;
+
+
+public class CommandMessage extends AbstractMessage {
+    public static final int CMD_MSG_AUTH_OK = 4352567;
+    public static final int CMD_MSG_FILE_DOWNLOAD = 1292567;
+    public static final int CMD_MSG_FILES_LIST = 5642532;
+    public static final int CMD_MSG_SERVER_DELETE_FILE = 4113577;
+
+    private int type;
+    private Object[] attachment;
+    private String fileName;
+
+// клнструкторы
+    public CommandMessage(int type) {
+        this.type = type;
+    }
+
+    public CommandMessage(int type, Object... attachment) {
+        this.type = type;
+        this.attachment = attachment;
+    }
+
+    public CommandMessage(int type, String fileName) {
+        this.type = type;
+        this.fileName = fileName;
+    }
+
+    public int getType() {
+        return type;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public Object[] getAttachment() {
+        return attachment;
+    }
+
+    public boolean is_AUTH_OK(){
+        return type == CMD_MSG_AUTH_OK;
+    }
+    public boolean is_FILE_DOWNLOAD(){
+        return type == CMD_MSG_FILE_DOWNLOAD;
+    }
+    public boolean is_FILES_LIST(){
+        return type == CMD_MSG_FILES_LIST;
+    }
+    public boolean is_SERVER_DELETE_FILE(){
+        return type == CMD_MSG_SERVER_DELETE_FILE;
+    }
+}
+//-------------------------
+package com.era.cloud.common;
+
+public class LoginAndPasswordMessage extends AbstractMessage {
+    private final int AUTH = 259436787; // для авторизации
+    private final int REG = 733277879; // для регистрации
+
+    private String login;
+    private String password;
+    private int typeMess; // тип
+
+    public LoginAndPasswordMessage(String login, String password) {
+        this.login = login;
+        this.password = password;
+    }
+
+    public String getLogin() {
+        return login;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public int getTypeMess() {
+        return typeMess;
+    }
+// методы для задания типа
+    public void setTypeAUTH() {
+        this.typeMess = AUTH;
+    }
+    public void setTypeREG() {
+        this.typeMess = REG;
+    }
+
+    public boolean typeIsAUTH() {
+        return typeMess == AUTH;
+    }
+
+    public boolean typeIsREG() {
+        return typeMess == REG;
+    }
+}
+//------------------------------
+package com.era.cloud.common;
+
+
+public class ServerListMessage extends AbstractMessage {
+    private String[] filesList;
+
+    public ServerListMessage(String[] list) {
+        filesList = list;
+    }
+
+    public String[] getFilesList() {
+        return filesList;
+    }
+}
+//-----------------------------------
+package com.era.cloud.common;
+
+public class SimpleMessage extends AbstractMessage {
+    private String message;
+    public SimpleMessage(String mess) {
+        message = mess;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+}
+//---------------------------------
+package com.era.cloud.common;
+
+import java.io.File;
+import java.io.Serializable;
+
+public class UploadFile extends AbstractMessage {
+
+    private String name;
+    private byte[] data;
+    private int size; // удалить
+
+    private int partNumber; // номер части
+    private int countNumber;
+
+    public UploadFile(File file) {
+        name = file.getName();
+        size = (int)file.length();
+    }
+
+    public int getPartNumber() {
+        return partNumber;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public byte[] getData() {
+        return data;
+    }
+
+    public void setData(byte[] data) {
+        this.data = data;
+    }
+
+    public void setPartNumber(int partNumber) {
+        this.partNumber = partNumber;
+    }
+
+    public int getCountNumber() {
+        return countNumber;
+    }
+
+    public void setCountNumber(int countNumber) {
+        this.countNumber = countNumber;
+    }
+}
+//============== Классы модуля Сервер ========================================
+
 package com.era.cloud.server;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -783,7 +1030,6 @@ import java.sql.Statement;
 public class CloudServer {
     private ConnectDB connectDB;
 
-
     private CloudServer() {
         connectDB = new ConnectDB();
     }
@@ -799,7 +1045,7 @@ public class CloudServer {
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         protected void initChannel(SocketChannel socketChannel) throws Exception {
                             socketChannel.pipeline().addLast(
-                                    new ObjectDecoder(1024 * 1024 * 100, ClassResolvers.cacheDisabled(null)),
+                                    new ObjectDecoder(1024 * 1024*100, ClassResolvers.cacheDisabled(null)),
                                     new ObjectEncoder(),
                                     new MainHandler(connectDB)
                             );
@@ -823,24 +1069,19 @@ public class CloudServer {
         new CloudServer().run();
     }
 }
-
-//=========== Handler =======================
+// ----------------------
 package com.era.cloud.server;
 
 import com.era.cloud.common.*;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.util.ReferenceCountUtil;
-
 import java.io.*;
-import java.sql.Connection;
-
 
 public class MainHandler extends ChannelInboundHandlerAdapter {
 
     private ConnectDB conDB;
     private String loginUser;
-    private final int MAX_SIZE = 1024*1024*100;
+    private final int MAX_SIZE = 1024*1024;
     private String rootDirectory = "server/ServerDir/";
     private String userDirectory;
 
@@ -893,6 +1134,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                 if (command.is_FILES_LIST()) // если команда на формирование списка файлов
                     fileListToClient(ctx);
                 if (command.is_FILE_DOWNLOAD()) { // команда на скачивание файла
+                    System.out.println("Поступила команда на скачивание");
                     String fileName = command.getFileName();
                     sendFileToClient(fileName, ctx);
                 }
@@ -903,7 +1145,9 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
             } else
                 if (msg instanceof UploadFile) { // если получен файл от клиента
                     UploadFile file = (UploadFile) msg;
+                    System.out.println(" Пришел файл от клиента");
                     writingFileToStorage(file);
+
             } else
                 if (msg instanceof SimpleMessage) { // если сообщение
                     String mes = ((SimpleMessage) msg).getMessage();
@@ -924,7 +1168,8 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         ctx.close();
     }
 
-// список файлов на сервере
+
+    // список файлов на сервере
     private void fileListToClient(ChannelHandlerContext ctx) {
         File dir = new File(userDirectory);
         ServerListMessage serList = new ServerListMessage(dir.list());
@@ -941,7 +1186,6 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         }
         try {
             File writeFile = new File(filePath);
-            System.out.println(writeFile);
             FileOutputStream out = new FileOutputStream(writeFile, append);
             out.write(file.getData()); // записали в файл
             out.close();
@@ -955,18 +1199,30 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         int len = (int)file.length();
         UploadFile req = new UploadFile(file);
         int partNumber = 1;
-        req.setPartNumber(partNumber);
         try {
-            FileInputStream inp = new FileInputStream(file);
-            BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
             if (len <= MAX_SIZE) {
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, len);
                 req.setData(new byte[len]);
+                req.setPartNumber(partNumber);
+                req.setCountNumber(partNumber);
                 buff.read(req.getData());
                 ctx.writeAndFlush(req);
+                buff.close();
             } else { // если длина файла превышает ограничение на передаваемый объем
+                FileInputStream inp = new FileInputStream(file);
+                BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
+                int countPart = len/MAX_SIZE + 1;
                 while (len > 0) {  // пока все не считали
+                    if (len > MAX_SIZE) {
+                        buff = new BufferedInputStream(inp, MAX_SIZE);
+                        req.setData(new byte[MAX_SIZE]);
+                    } else {
+                        buff = new BufferedInputStream(inp, len);
+                        req.setData(new byte[len]);
+                    }
                     req.setPartNumber(partNumber); // устанавливаем номер посылки
-                    req.setData(new byte[MAX_SIZE]); // обновляем массив для данных
+                    req.setCountNumber(countPart);
                     if ((buff.available()) > 0) {
                         buff.read(req.getData()); // записываем в массив данные
                     }
@@ -974,8 +1230,8 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                     partNumber++;
                     ctx.writeAndFlush(req); // отправляем посылку
                 }
+                buff.close();
             }
-            buff.close();
         } catch (IOException e) {
             e.printStackTrace();
         }        System.out.println();
@@ -991,7 +1247,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         }
     }
 }
-//=================================== Класс ConnectDB для работы с БД ===========
+// ---------------------------------------------
 package com.era.cloud.server;
 
 import java.sql.*;
@@ -1015,7 +1271,7 @@ public class ConnectDB {
         }
 
     }
-// авторизация, проверяем, есть ли юзер в базе
+// авторизация, проверяем, есть ли юзер в база
     String authorize(String login, String pass) {
         String login_user = null;
         String query = "SELECT login, password FROM users WHERE login = '" + login + "'" + " AND password = '" + pass + "'";
@@ -1082,170 +1338,5 @@ public class ConnectDB {
         }
     }
 }
+//==================================================================
 
-//============= классы из модуля common =======================================================
-package com.era.cloud.common;
-import java.io.Serializable;
-public abstract class AbstractMessage implements Serializable {
-}
-//---------------------------------------------
-package com.era.cloud.common;
-public class CommandMessage extends AbstractMessage {
-    public static final int CMD_MSG_AUTH_OK = 4352567;
-    public static final int CMD_MSG_FILE_DOWNLOAD = 1292567;
-    public static final int CMD_MSG_FILES_LIST = 5642532;
-    public static final int CMD_MSG_SERVER_DELETE_FILE = 4113577;
-
-    private int type;
-    private Object[] attachment;
-    private String fileName;
-
-// клнструкторы
-    public CommandMessage(int type) {
-        this.type = type;
-    }
-
-    public CommandMessage(int type, Object... attachment) {
-        this.type = type;
-        this.attachment = attachment;
-    }
-
-    public CommandMessage(int type, String fileName) {
-        this.type = type;
-        this.fileName = fileName;
-    }
-
-    public int getType() {
-        return type;
-    }
-
-    public String getFileName() {
-        return fileName;
-    }
-
-    public Object[] getAttachment() {
-        return attachment;
-    }
-
-    public boolean is_AUTH_OK(){
-        return type == CMD_MSG_AUTH_OK;
-    }
-    public boolean is_FILE_DOWNLOAD(){
-        return type == CMD_MSG_FILE_DOWNLOAD;
-    }
-    public boolean is_FILES_LIST(){
-        return type == CMD_MSG_FILES_LIST;
-    }
-    public boolean is_SERVER_DELETE_FILE(){
-        return type == CMD_MSG_SERVER_DELETE_FILE;
-    }
-}
-//-----------------------------------------
-package com.era.cloud.common;
-
-public class LoginAndPasswordMessage extends AbstractMessage {
-    private final int AUTH = 259436787; // для авторизации
-    private final int REG = 733277879; // для регистрации
-
-    private String login;
-    private String password;
-    private int typeMess; // тип
-
-    public LoginAndPasswordMessage(String login, String password) {
-        this.login = login;
-        this.password = password;
-    }
-
-    public String getLogin() {
-        return login;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public int getTypeMess() {
-        return typeMess;
-    }
-// методы для задания типа
-    public void setTypeAUTH() {
-        this.typeMess = AUTH;
-    }
-    public void setTypeREG() {
-        this.typeMess = REG;
-    }
-
-    public boolean typeIsAUTH() {
-        return typeMess == AUTH;
-    }
-
-    public boolean typeIsREG() {
-        return typeMess == REG;
-    }
-}
-//-----------------------------------------
-package com.era.cloud.common;
-public class ServerListMessage extends AbstractMessage {
-    private String[] filesList;
-
-    public ServerListMessage(String[] list) {
-        filesList = list;
-    }
-
-    public String[] getFilesList() {
-        return filesList;
-    }
-}
-//----------------------------------------------
-package com.era.cloud.common;
-
-public class SimpleMessage extends AbstractMessage {
-    private String message;
-    public SimpleMessage(String mess) {
-        message = mess;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-}
-//----------------------------------------
-package com.era.cloud.common;
-
-import java.io.File;
-import java.io.Serializable;
-
-public class UploadFile extends AbstractMessage {
-
-    private String name;
-    private byte[] data;
-    private int size; // удалить
-
-    private int partNumber; // номер части
-
-    public UploadFile(File file) {
-        name = file.getName();
-        size = (int)file.length();
-    }
-
-    public int getPartNumber() {
-        return partNumber;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public byte[] getData() {
-        return data;
-    }
-
-    public void setData(byte[] data) {
-        this.data = data;
-    }
-
-    public void setPartNumber(int partNumber) {
-        this.partNumber = partNumber;
-    }
-}
-//============================================================================================================

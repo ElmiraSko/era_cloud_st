@@ -1,14 +1,9 @@
 package com.era.cloud.server;
 
-
 import com.era.cloud.common.*;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.util.ReferenceCountUtil;
-
 import java.io.*;
-import java.sql.Connection;
-
 
 public class MainHandler extends ChannelInboundHandlerAdapter {
 
@@ -17,8 +12,6 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     private final int MAX_SIZE = 1024*1024;
     private String rootDirectory = "server/ServerDir/";
     private String userDirectory;
-
-
 
    public MainHandler(ConnectDB conDB) {
        super();
