@@ -11,10 +11,12 @@ import java.util.concurrent.CountDownLatch;
 public class WriteFileToClientDirectoryTask implements Task {
     private ObjectDecoderInputStream in;
     private File clientDirectory;
+    private CountDownLatch countD;
 
-    WriteFileToClientDirectoryTask(ObjectDecoderInputStream in, File clientDirectory) {
+    WriteFileToClientDirectoryTask(ObjectDecoderInputStream in, File clientDirectory, CountDownLatch countD) {
         this.in = in;
         this.clientDirectory = clientDirectory;
+        this.countD = countD;
     }
 
     @Override
@@ -30,6 +32,7 @@ public class WriteFileToClientDirectoryTask implements Task {
                         System.out.println(part + "  - part");
                         writeFileInDir(file);
                         if (part == count) {
+                            countD.countDown();
                             break;
                         }
                     }

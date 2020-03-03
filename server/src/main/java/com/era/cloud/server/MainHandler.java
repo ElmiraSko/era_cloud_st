@@ -4,6 +4,8 @@ import com.era.cloud.common.*;
 import io.netty.channel.*;
 import io.netty.util.ReferenceCountUtil;
 import java.io.*;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 public class MainHandler extends ChannelInboundHandlerAdapter {
 
@@ -34,9 +36,9 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                         if (log_pass.typeIsAUTH()){ // если авторизация
                             loginUser = conDB.authorize(log, pass); // есть ли в базе такой пользователь
                             if (loginUser != null) {
+                                userDirectory = rootDirectory + loginUser + "/";
                                 SimpleMessage mess = new SimpleMessage("OK");
                                 ctx.writeAndFlush(mess);
-                                userDirectory = rootDirectory + loginUser + "/";
                                 System.out.println(userDirectory);
                             }
                             else {SimpleMessage mess = new SimpleMessage("NO");
@@ -102,9 +104,16 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     // список файлов на сервере
     private void fileListToClient(ChannelHandlerContext ctx) {
         File dir = new File(userDirectory);
-        ServerListMessage serList = new ServerListMessage(dir.list());
-        ctx.writeAndFlush(serList);
+        String[] filesArray = dir.list();
+        ArrayList<String> files = new ArrayList<>();
+        if (filesArray != null){
+            files.addAll(Arrays.asList(filesArray));
+        }
+        ServerListMessage serverList = new ServerListMessage(files);
+        ctx.writeAndFlush(serverList);
     }
+
+
 
     // запись файла на диск
     private void writingFileToStorage(UploadFile file) {
@@ -143,12 +152,9 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                 FileInputStream inp = new FileInputStream(file);
                 BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
                 int countPart = len/MAX_SIZE + 1;
+                req.setData(new byte[MAX_SIZE]);
                 while (len > 0) {  // пока все не считали
-                    if (len > MAX_SIZE) {
-                        buff = new BufferedInputStream(inp, MAX_SIZE);
-                        req.setData(new byte[MAX_SIZE]);
-                    } else {
-                        buff = new BufferedInputStream(inp, len);
+                    if (len <= MAX_SIZE) {
                         req.setData(new byte[len]);
                     }
                     req.setPartNumber(partNumber); // устанавливаем номер посылки

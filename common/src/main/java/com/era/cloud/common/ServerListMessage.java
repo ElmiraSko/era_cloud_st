@@ -1,14 +1,16 @@
 package com.era.cloud.common;
 
 
-public class ServerListMessage extends AbstractMessage {
-    private String[] filesList;
+import java.util.ArrayList;
 
-    public ServerListMessage(String[] list) {
-        filesList = list;
+public class ServerListMessage extends AbstractMessage {
+    private ArrayList<String> filesList;
+
+    public ServerListMessage(ArrayList<String> filesList) {
+        this.filesList = filesList;
     }
 
-    public String[] getFilesList() {
+    public ArrayList<String> getFilesList() {
         return filesList;
     }
 }

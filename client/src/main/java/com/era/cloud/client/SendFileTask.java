@@ -43,12 +43,9 @@ public class SendFileTask implements Task{
                 FileInputStream inp = new FileInputStream(file);
                 BufferedInputStream buff = new BufferedInputStream(inp, MAX_SIZE);
                 int countPart = len/MAX_SIZE + 1;
+                req.setData(new byte[MAX_SIZE]);
                 while (len > 0) {
-                    if (len > MAX_SIZE) {
-                        buff = new BufferedInputStream(inp, MAX_SIZE);
-                        req.setData(new byte[MAX_SIZE]);
-                    } else {
-                        buff = new BufferedInputStream(inp, len);
+                    if (len <= MAX_SIZE) {
                         req.setData(new byte[len]);
                     }
                     req.setPartNumber(partNumber);

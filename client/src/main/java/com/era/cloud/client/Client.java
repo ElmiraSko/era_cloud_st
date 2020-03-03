@@ -6,6 +6,7 @@ import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
 import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
 
 import javax.swing.*;
+import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import java.awt.*;
@@ -13,14 +14,13 @@ import java.awt.event.*;
 import java.io.*;
 import java.net.Socket;
 
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.ArrayList;
+import java.util.concurrent.*;
 
 import static com.era.cloud.common.CommandMessage.CMD_MSG_FILE_DOWNLOAD;
 import static com.era.cloud.common.CommandMessage.CMD_MSG_SERVER_DELETE_FILE;
 
 public class Client extends JFrame {
-
-//    private final int MAX_SIZE = 1024*1024*100; максимальный размер передачи, указан в задаче
 
     private Socket socket;
     private ObjectDecoderInputStream in;
@@ -39,7 +39,9 @@ public class Client extends JFrame {
     private ArrayBlockingQueue<Task> requests = new ArrayBlockingQueue<>(10);
     private boolean isFile = false;  // true - если файл
     private JButton backButton, buttonEnt, buttonAUth, button1, button2, button3;
-    private String messFromServer = "message";
+
+    private volatile String messFromServer = "message";
+    private volatile ArrayList<String> fileList;
 
     private Client() {
         connect(); // подключение к серверу, создание потоков ввода/вывода
@@ -65,7 +67,16 @@ public class Client extends JFrame {
                 try {
                     Task task = requests.take();
                     task.doing();
-                    System.out.println("Задача выполнена");
+                    if (task instanceof AuthCommandTask) {
+                        messFromServer = ((AuthCommandTask) task).serverAnswer();
+                    }
+                    if (task instanceof GetFileListCommandTask) {
+                        fileList = ((GetFileListCommandTask) task).getFiles();
+                    }
+//                    if (task instanceof WriteFileToClientDirectoryTask) {
+//                        updateClientList();
+//                    }
+                    System.out.println("Выполнена задача: " + task.getClass());
                 } catch (InterruptedException ex) {
                     ex.printStackTrace();
                 }
@@ -108,7 +119,6 @@ public class Client extends JFrame {
         p1.add(buttonEnt);
         p1.add(buttonAUth);
         c.add(p1, BorderLayout.NORTH);
-
         clientListModel = new DefaultListModel<>();
 
         clientList = new JList<>(clientListModel);
@@ -139,6 +149,7 @@ public class Client extends JFrame {
             }
         });
         listOnServer.addFocusListener(new ServerListFocusListener(listOnServer));
+
 
         JScrollPane paneL = new JScrollPane(clientList);
         JScrollPane paneR = new JScrollPane(listOnServer);
@@ -200,14 +211,15 @@ public class Client extends JFrame {
                 String sendObj = textField.getText();
                 if (!sendObj.equals("")) {
                     if (isFile) {
+                        CountDownLatch cdl3 = new CountDownLatch(1);
                         try {
                             requests.put(new SendFileTask(sendObj, out)); // передача файла на сервер
-                            requests.put(new GetFileListCommandTask(out)); // запрос на список файлов
-                            updateServerList();  // обновли серверный список
-//                            requests.put(new UpdateServerListTask(in, listOnServerModel));
+                            requests.put(new GetFileListCommandTask(out, in, cdl3)); // получение списка файлов с сервера
+                            cdl3.await();
                         } catch (InterruptedException e1) {
                             e1.printStackTrace();
                         }
+                        updateServerList();
                     } else JOptionPane.showMessageDialog(null, "Выберите файл из списка!");
                 } else JOptionPane.showMessageDialog(null, "Файл не выбран!");
                 textField.setText("");
@@ -217,6 +229,7 @@ public class Client extends JFrame {
 
     // Слушатель для "Скачать"
     private class DownLoadButtonListener implements ActionListener {
+        CountDownLatch countD = new CountDownLatch(1);
         @Override
         public void actionPerformed(ActionEvent e) {
             if (!serverSideFileName.equals("")) {
@@ -224,46 +237,42 @@ public class Client extends JFrame {
                 CommandMessage com = new CommandMessage(CMD_MSG_FILE_DOWNLOAD, serverSideFileName); // командана на скачивание файла с сервера
                 try {
                     requests.put(new DownloadFileFromServerCommandTask(com, out)); // отправка команды
+                    requests.put(new WriteFileToClientDirectoryTask(in, parentClientFile, countD)); // записали файл
+                    countD.await();
                 } catch (InterruptedException ex) {
                     ex.printStackTrace();
                 }
                 textField.setText(""); // очистили поле
                 serverSideFileName = ""; // очистили ссылку
-                try {
-                    requests.put(new WriteFileToClientDirectoryTask(in, parentClientFile)); // записали файл
-                    requests.put(new UpdateClientListTask(clientListModel, parentClientFile)); // обновили список
-                } catch (InterruptedException ex) {
-                    ex.printStackTrace();
-                }
+                updateClientList();
             } else JOptionPane.showMessageDialog(null, "Файл для скачивания не выбран.");
         }
     }
 
     // Слушатель для кнопки "Удалить"
     private class DeleteButtonListener implements ActionListener {
-
         @Override
         public void actionPerformed(ActionEvent e) {
             if (isFile && !textField.getText().equals("")) { // если текстовое поле содержит имя файла
                 File deleteFile = new File(textField.getText());     // создаем объект файла
                 if (deleteFile.exists()) { // если удаляемый файл существует
                     boolean bb = deleteFile.delete();
-                    try { // обновим клиентский список
-                        requests.put(new UpdateClientListTask(clientListModel, parentClientFile));
-                    } catch (InterruptedException ex) {
-                        ex.printStackTrace();
+                    if (bb) {
+                        System.out.println(deleteFile + " файл удален.");
+                        updateClientList();
                     }
-                    if (bb) System.out.println(deleteFile + " файл удален.");
                     else System.out.println("Произошла ошибка при удалении файла.");
                 }
             } else {
                 if (!serverSideFileName.equals("")) { // если выбран элемент из серверного списка
+                    CountDownLatch cdl4 = new CountDownLatch(1);
                     CommandMessage deleteCommand = new CommandMessage(CMD_MSG_SERVER_DELETE_FILE, serverSideFileName);
                     try {
                         requests.put(new DeleteFileOnServerTask(out, deleteCommand)); // отправка команды
-                        requests.put(new GetFileListCommandTask(out)); // запрос серверного списка
+                        requests.put(new GetFileListCommandTask(out, in, cdl4)); // запрос серверного списка
+                        cdl4.await();
                     } catch (InterruptedException ex) {ex.printStackTrace();}
-                    updateServerList();    // ожидаем и обновляем серверный список
+                    updateServerList();
                 }
                 else JOptionPane.showMessageDialog(null, "Файл не выбран.");
             }
@@ -298,7 +307,7 @@ public class Client extends JFrame {
                 if (files != null) {
                     for (File f : files) {
                         clientListModel.addElement(f);
-                        System.out.println(f);
+//                        System.out.println(f);
                     }
                 } else System.out.println("Мы в корневой папке");
 
@@ -381,7 +390,24 @@ public class Client extends JFrame {
         button3.setEnabled(true);
         backButton.setEnabled(true);
     }
+    // обновление клиентского списка
+    private void updateClientList() {
+        clientListModel.clear();
+        File[] filesAndDirectory = parentClientFile.listFiles(pathname -> !pathname.isHidden());
+        if (filesAndDirectory != null) {
+            for (File s : filesAndDirectory) {
+                clientListModel.addElement(s);
+            }
+        } else System.out.println("Возникла проблема при обновлении файлов!");
+    }
 
+    // обновление серверного списка
+    private void updateServerList() {
+        listOnServerModel.clear();
+        for(String ss: fileList){
+            listOnServerModel.addElement(ss);
+        }
+    }
     //=========================================================================
 // вспомогательное окно для авторизации, регистрации нового пользователя
     class AuthWindow extends JFrame {
@@ -420,6 +446,7 @@ public class Client extends JFrame {
 
         // слушатель кнопки "Войти"/"Зарегистрироваться"
         private class InnerEnterButtonListener implements ActionListener {
+            CountDownLatch cdl = new CountDownLatch(1);
             @Override
             public void actionPerformed(ActionEvent e) {
                 String loginText = login.getText();
@@ -432,13 +459,17 @@ public class Client extends JFrame {
                         loginAndPass.setTypeREG(); // указали, что для регистрации
                     }
                     try {
-                        requests.put(new AuthCommandTask(out, loginAndPass)); // отправили логин, пароль
-                        readMessFromServer(); // дожидаемся ответ сервера
+                        AuthCommandTask task = new AuthCommandTask(out, in, loginAndPass, cdl);
+                        requests.put(task); // отправили логин, пароль
+                        cdl.await();
                         authWindow.dispose();
-                        if (messFromServer.equals("OK")) {
-                            // обновляем клиентский список
-                            requests.put(new UpdateClientListTask(clientListModel, clientFile));
-                            requests.put(new GetFileListCommandTask(out)); // команда на получение серверного списка
+                        if (messFromServer.equals("OK")){
+                            CountDownLatch cdl2 = new CountDownLatch(1);
+                            updateClientList();
+                            try {
+                                requests.put(new GetFileListCommandTask(out, in, cdl2)); // команда на получение серверного списка
+                            } catch (InterruptedException ex) {ex.printStackTrace();}
+                            cdl2.await();
                             updateServerList(); // обновляем серверный список
                             setEnabledAllButton(); // активируем кнопки
                         } else {
@@ -456,40 +487,6 @@ public class Client extends JFrame {
                             "Внимание", JOptionPane.INFORMATION_MESSAGE);
                 }
             }
-        }
-    }
-
-    //Два метода вызываются в gui:
-    // получение ответа от сервера
-    private void readMessFromServer() {
-        try {
-            Object obj = in.readObject();
-            if (obj instanceof SimpleMessage) {
-                messFromServer = ((SimpleMessage) obj).getMessage();
-                System.out.println(messFromServer);
-            }
-        } catch (IOException | ClassNotFoundException ex) {
-            ex.printStackTrace();
-            System.out.println("Сообщение от сервера");
-        }
-    }
-
-    // обновление серверного списка
-    private void updateServerList() {
-        listOnServerModel.clear();
-        try {
-            Object obj = in.readObject();
-            if (obj instanceof AbstractMessage) {
-                String[] files = ((ServerListMessage) obj).getFilesList();
-                if (files != null) {
-                    for (String s : files) {
-                        listOnServerModel.addElement(s);
-                        System.out.println(s);
-                    }
-                }
-            }
-        } catch (IOException | ClassNotFoundException ex) {
-            ex.printStackTrace();
         }
     }
 
@@ -515,5 +512,25 @@ public class Client extends JFrame {
             System.out.println("Проблема с закрытием сокета");
         }
 
+    }
+
+
+
+
+
+
+    //Два метода вызываются в gui:
+    // получение ответа от сервера
+    private void readMessFromServer() {
+        try {
+            Object message = in.readObject();
+            if (message instanceof SimpleMessage) {
+                messFromServer = ((SimpleMessage) message).getMessage();
+                System.out.println(messFromServer);
+            }
+        } catch (IOException | ClassNotFoundException ex) {
+            ex.printStackTrace();
+            System.out.println("Сообщение от сервера");
+        }
     }
 }
