@@ -513,24 +513,4 @@ public class Client extends JFrame {
         }
 
     }
-
-
-
-
-
-
-    //Два метода вызываются в gui:
-    // получение ответа от сервера
-    private void readMessFromServer() {
-        try {
-            Object message = in.readObject();
-            if (message instanceof SimpleMessage) {
-                messFromServer = ((SimpleMessage) message).getMessage();
-                System.out.println(messFromServer);
-            }
-        } catch (IOException | ClassNotFoundException ex) {
-            ex.printStackTrace();
-            System.out.println("Сообщение от сервера");
-        }
-    }
 }
